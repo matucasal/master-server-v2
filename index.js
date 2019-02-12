@@ -36,7 +36,7 @@ io.on('connection', function(socket){
         var index = gameRooms.findIndex(x => x.level === data.level);
         
         socket.emit("Welcome", JSON.stringify(gameRooms[index]));
-        userList.push({'User':data.user, 'id':socket.id, 'turn': 0});
+        userList.push({'name':data.user, 'id':socket.id, 'turn': 0, 'books': 1000});
         
         console.log("User connected. Total online: " + userList.length);
 
