@@ -6,12 +6,12 @@ const questionSchema = new Schema({
 
     level: { type: String },
     question: { type: String },
-    answer_a: { type: String},
-    answer_b: { type: String},
-    answer_ok: { type: String}
+    option_1: { type: String },
+    option_2: { type: String },
+    option_2: { type: String },
+    answer_ok: { type: String }
     
   });
-  
   
   // Create a model
   const Question = mongoose.model('question', questionSchema);

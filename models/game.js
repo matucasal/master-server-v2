@@ -5,7 +5,8 @@ const Schema = mongoose.Schema;
 const gameSchema = new Schema({
 
     date: { type: Date, default: Date.now },
-    participants: [{ user : String }, {price: Number }],
+    participants: [{ userID: String }, { price: Number }, { username: string }],
+    rounds : { type: Number },
     won: { user : String }
     
   });

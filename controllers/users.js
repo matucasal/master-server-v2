@@ -13,8 +13,6 @@ signToken = user => {
 
 module.exports = {
   signUp: async (req, res, next) => {
-    //const { email, password, name } = req.value.body;
-    console.log(req.value);
     const { email, password, name } = req.value.body;
 
     // Check if there is a user with the same email
@@ -48,7 +46,7 @@ module.exports = {
     const token = signToken(req.user);
     res.setHeader('Content-Type', 'application/json');
     res.status(200);
-    res.send(JSON.stringify({ name: req.user.local.name, mail: req.user.local.mail, token: token, level: req.user.level }, null, 3));
+    res.send(JSON.stringify({ name: req.user.local.name, mail: req.user.local.mail, token: token, level: req.user.level, userID: req.user.id }, null, 3));
   },
 
   googleOAuth: async (req, res, next) => {
@@ -68,5 +66,7 @@ module.exports = {
     console.log('I managed to get here!');
     res.json({ secret: "resource" });
   }
+
+
 }
 

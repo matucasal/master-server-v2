@@ -21,6 +21,7 @@ if (!process.env.NODE_ENV === 'test') {
 
 app.use(bodyParser.json());
 app.use(express.static(__dirname + '/client/front/dist/front')); // Provide static directory for frontend
+app.use(express.static(__dirname + '/resources/images/avatars'));
 
 // Connect server to Angular 2 Index.html
 app.get('/', (req, res) => {

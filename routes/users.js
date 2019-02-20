@@ -23,7 +23,8 @@ router.route('/oauth/facebook')
 router.route('/secret')
   .get(passportJWT, UsersController.secret);
 
-
+  router.route('/resources/images')
+  .get(passportJWT, UsersController.secret);
 
 
 

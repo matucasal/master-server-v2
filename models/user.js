@@ -4,8 +4,14 @@ const Schema = mongoose.Schema;
 
 // Create a schema
 const userSchema = new Schema({
-  books: { type: Number },
-  level: { type: String},
+  books: { type: Number, default: 1000},
+  level: { type: String },
+  avatar: { type: String, default: 'avatarDefault.png' },
+  accesories: [String],
+  gamePlayed: { type: Number, default: 0},
+  gameWon: { type: Number, default: 0 },
+  gameLost: { type: Number, default: 0 },
+  favoriteCategory: { type: String },
   method: {
     type: String,
     enum: ['local', 'google', 'facebook'],
