@@ -108,17 +108,16 @@ function userBet(data){
     var socket = this;
     //Le resto al user la cantidad de libros que aposto
     gamesPlaying[data.roomID].users[socket.id].books = gamesPlaying[data.roomID].users[socket.id].books - data.value;
-    let bet = {"socketID": socket.id, "bet": data.value}
+    let bet = {"socketID": socket.id, "bet": data.value, "userID": data.userID}
     gamesPlaying[data.roomID].round[gamesPlaying[data.roomID].round.length -1].bets.push(bet);
     //Busco quien es el siguiente en el turno.
     let nextIndex = gamesPlaying[data.roomID].round[gamesPlaying[data.roomID].round.length -1].users.findIndex(x => x.socketID === socket.id) + 1;
-    let nextId =  gamesPlaying[data.roomID].round[gamesPlaying[data.roomID].round.length -1].users[nextIndex].socketID;
+    let nextId =  gamesPlaying[data.roomID].round[gamesPlaying[data.roomID].round.length -1].users[nextIndex].userID;
     //Enviar cuanto aposto el user y quien sigue
-    socket.to(data.roomID).emit('newBet', JSON.stringify({"apuesta" : data.value, "next": nextId}));
-
-    /*
+    
     //Se envía la pregunta cuanto los users ya hayan apostado
     if (gamesPlaying[data.roomID].round[gamesPlaying[data.roomID].round.length -1].bets.length == 4) {
+        socket.to(data.roomID).emit('newBet', JSON.stringify({"apuesta" : data.value, "next": null}));
         Question.aggregate().sample(1).exec( function (err, result){
             let question = {"id": result.id, "question": result.question, "option_1": result.option_1, "option_2": result.option_2, "option_3": result.option_3 };
             io.sockets.in(data.roomID).emit('question', JSON.stringify(question));
@@ -126,10 +125,9 @@ function userBet(data){
             gamesPlaying[data.roomID].round[gamesPlaying[data.roomID].round.length -1].answer_ok = result.answer_ok;
             console.log(result)
         })
+    }else{
+        socket.to(data.roomID).emit('newBet', JSON.stringify({"apuesta" : data.value, "next": nextId}));
     }
-    */
-
-
     
 };
 
