@@ -77,7 +77,7 @@ join = function(data){
         gameRooms[index].users.push(x[0]);
 
     }
-        
+    console.log("El room tiene: " + socket.adapter.rooms[data].length);
     if(socket.adapter.rooms[data].length === 4){
         console.log('Room with id: ' + data + ' is full. Starting game...')
         var index = gameRooms.findIndex(x => x.id === data);
