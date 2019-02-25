@@ -31,6 +31,11 @@ export class SocketService {
     this.socket.emit('userBet', msg);
   }
 
+  enviarRespuesta(msg: any) {
+    console.log("Se emite la respuesta");
+    this.socket.emit('userAnswer', msg);
+  }
+
   // HANDLER
   onNewMessage() {
     return Observable.create(observer => {
@@ -41,6 +46,9 @@ export class SocketService {
         observer.next(msg);
       });
       this.socket.on('usersInGame', msg => {
+        observer.next(msg);
+      });
+      this.socket.on('newBet', msg => {
         observer.next(msg);
       });
     });
@@ -56,8 +64,9 @@ export class SocketService {
 
   onNewQuestion() {
     return Observable.create(observer => {
-      this.socket.on('finishBet', question => {
+      this.socket.on('question', question => {
         observer.next(question);
+        console.log(question);
       });
     });
   }

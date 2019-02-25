@@ -105,6 +105,7 @@ join = function(data){
  * @param {{value: number , roomID: string}} data
  */
 function userBet(data){
+    
     var socket = this;
     //Le resto al user la cantidad de libros que aposto
     gamesPlaying[data.roomID].users[socket.id].books = gamesPlaying[data.roomID].users[socket.id].books - data.value;

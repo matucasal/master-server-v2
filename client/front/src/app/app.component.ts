@@ -17,6 +17,7 @@ export class AppComponent implements OnInit {
   username;
   question;
   bet;
+  id = Math.random().toString(36).substr(2, 9);
 
   constructor(
     private socketService: SocketService
@@ -34,15 +35,15 @@ export class AppComponent implements OnInit {
       console.log(this.game);
     });
 
-    this.socketService.onNewQuestion().subscribe(quiz => {
-      this.question = quiz;
-      console.log(quiz);
+    this.socketService.onNewQuestion().subscribe(question => {
+      this.question = question;
+      console.log(question);
     })
 
   }
 
   newUser(username) {
-    this.socketService.newUser({'user': username, 'level': 'Newbie'});
+    this.socketService.newUser({'user': username, 'level': 'Virtuoso', 'userID': this.id});
   }
 
   join() {
@@ -51,8 +52,14 @@ export class AppComponent implements OnInit {
   }
 
   userBet(bet){
-    this.socketService.userBet(bet);
+    let msg = {"roomID" : this.game.id, "value" : bet, 'userID': this.id}
+    this.socketService.userBet(msg);
     console.log("Apuesta: " + bet);
+  }
+
+  enviarRespuesta(pregunta, time){
+    let msg = {"roomID" : this.game.id, "answer" : pregunta, 'userID': this.id, "timeResponse": time}
+    this.socketService.enviarRespuesta(msg);
   }
 
 }
