@@ -37,7 +37,6 @@ newUser = function(data){
     var socket = this;
     console.log("Usuario conectado: " + JSON.stringify(data));
             console.log(data);
-            console.log(data.userID);
             //Busco la partida segun el level
             var index = gameRooms.findIndex(x => x.level === data.level);
             socket.emit("Welcome", JSON.stringify(gameRooms[index]));
@@ -77,7 +76,7 @@ join = function(data){
         gameRooms[index].users.push(x[0]);
 
     }
-    console.log("El room tiene: " + socket.adapter.rooms[data].length);
+        
     if(socket.adapter.rooms[data].length === 4){
         console.log('Room with id: ' + data + ' is full. Starting game...')
         var index = gameRooms.findIndex(x => x.id === data);
@@ -88,11 +87,11 @@ join = function(data){
         var x = gameRooms.filter(function (element){ return element.id != data });
         gameRooms = x;
         //Comienza la partida. Enviar quien empieza.
-        gameData.categoria = "Ciencia";
+        gameData.category = "Ciencia";
         io.sockets.in(data).emit('beginNewGame', JSON.stringify(gameData));
-        var round = {"categogia" : gameData.categoria, "users": gameData.users, "questionID" : '', "answer_ok": '' , "userWon" : '', "bets":[]}
-        gameData.round = [];
-        gameData.round.push(round);
+        var round = {"category" : gameData.category, "users": gameData.users, "questionID" : '', "answer_ok": '' , "userWon" : '', "bets":[]}
+        gameData.rounds = [];
+        gameData.rounds.push(round);
         var users = gameData.users;
         users = Object.assign({}, ...users.map(user => ({[user.socketID]: user})));
         gameData.users = users;
@@ -102,17 +101,19 @@ join = function(data){
 }
 
 /**
- * @param {{value: number , roomID: string}} data
+ * @param {{value: number , roomID: string, userID: string}} data
  */
 function userBet(data){
     var socket = this;
     //Le resto al user la cantidad de libros que aposto
-    gamesPlaying[data.roomID].users[socket.id].books = gamesPlaying[data.roomID].users[socket.id].books - data.value;
+    //gamesPlaying[data.roomID].users[socket.id].books = gamesPlaying[data.roomID].users[socket.id].books - data.value;
+    
     let bet = {"socketID": socket.id, "bet": data.value, "userID": data.userID}
     gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].bets.push(bet);
     
     //Enviar cuanto aposto el user y quien sigue
     
+
     //Se envía la pregunta cuanto los users ya hayan apostado
     if (gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].bets.length == 4) {
         socket.to(data.roomID).emit('newBet', JSON.stringify({"apuesta" : data.value, "next": null}));
@@ -129,18 +130,71 @@ function userBet(data){
         socket.to(data.roomID).emit('newBet', JSON.stringify({"apuesta" : data.value, "next": nextId}));
     }
     
+
+
     
 };
 
 /**
- * @param {{answer: String , roomID: string, timeResponse: Number}} data
+ * @param {{answer: String , roomID: string, timeResponse: Number, userID: string}} data
  */
 function userAnswer(data){
     var socket = this;
-    let answerSelected = {"socketID": socket.id, "answer": data.value}
-    gamesPlaying[data.roomID].round[gamesPlaying[data.roomID].round.length -1].aswers.push(let);
-    if (gamesPlaying[data.roomID].round[gamesPlaying[data.roomID].round.length -1].aswers.length == 4) {
+    gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answers = [];
+    let result;
+    let answerSelected = {"socketID": socket.id, "answer": data.value, "timeResponse": data.timeResponse}
+    gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answers.push(answerSelected);
+    
+    if (gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answers.length == 4) {
+        //Opcion correcta
+        let res_ok = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answer_ok;
+        let winner;
         //verificar quien ganó, emitir respuesta y recalcular libros para cada user.
+        for (let index = 0; index < gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answers.length; index++) {
+            const element = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answers[index];
+            if (element.answer == res_ok) {
+                if (winner == null) {
+                    winner = element;
+                }else{
+                    if (element.timeResponse < winner.timeResponse) {
+                        winner = element;
+                    }
+                }
+            }
+        }
+
+        //Se calculan los libros
+        let userWinner = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].bets.filter(function (element){ return element.socketID == winner.socketID });
+        let price = userWinner.bet;
+        let result = gamesPlaying[data.roomID].users[userWinner.socketID].userID;
+        let usersLost = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].bets.filter(function (element){ return element.socketID != winner.socketID });
+        
+        //Se envia el resultado
+        io.socket.in(data.roomID).emit('roundResult', {'userID' : result});
+
+        //Se le suman libros al user que gano
+        gamesPlaying[data.roomID].users[userWinner.socketID].books = (gamesPlaying[data.roomID].users[userWinner.socketID].books + price) + (price * (gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users.length - 1));
+        
+        //Se le restan los libros a los que perdieron
+        usersLost.forEach(element => {
+            //Hacer esto siempre y cuando no se reste del lado server al momento que apostó un user
+            gamesPlaying[data.roomID].users[element.socketID].books = gamesPlaying[data.roomID].users[element.socketID].books - price;
+            if (gamesPlaying[data.roomID].users[element.socketID].books <= 0){
+                //Game over para el player
+                //Hay que quitarlo de la room
+                delete gamesPlaying[data.roomID].users[element.socketID];
+            }
+        });
+
+        let newRound = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1];
+        newRound.category = "Deportes";
+        newRound.questionID = "";
+        newRound.res_ok = "";
+        newRound.userWon ="";
+        newRound.bets = [];
+        newRound.answers = []; 
+        newRound.users = gamesPlaying[data.roomID].users;
+        gamesPlaying[data.roomID].rounds.push(newRound);        
     
     }
 }
@@ -163,8 +217,7 @@ function finishBet(data){
 function userPass(data){
     var socket = this;
 
-    gamesPlaying[data.roomID].round[gamesPlaying[data.roomID].round.length -1].users = gamesPlaying[data.roomID].round[gamesPlaying[data.roomID].round.length -1].usersfilter(function (element){ return element.socketID != socket.id });
+    gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users = gamesPlaying[data.roomID].round[gamesPlaying[data.roomID].round.length -1].usersfilter(function (element){ return element.socketID != socket.id });
     //remover el usuario que no juega la ronda
-    console.log(gamesPlaying[data.roomID].round[gamesPlaying[data.roomID].round.length -1].users)
+    console.log(gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users)
 };
-

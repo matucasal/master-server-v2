@@ -24,6 +24,7 @@
     "passport-local": "^1.0.0",
     "path": "^0.12.7",
     "socket.io": "^2.2.0",
-    "uniqid": "^5.0.3"
+    "uniqid": "^5.0.3",
+    "util": "^0.11.1"
   }
 }
