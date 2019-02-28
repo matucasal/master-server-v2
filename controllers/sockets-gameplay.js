@@ -87,9 +87,9 @@ join = function(data){
         var x = gameRooms.filter(function (element){ return element.id != data });
         gameRooms = x;
         //Comienza la partida. Enviar quien empieza.
-        gameData.category = "Ciencia";
+        gameData.categoria = "Ciencia";
         io.sockets.in(data).emit('beginNewGame', JSON.stringify(gameData));
-        var round = {"category" : gameData.category, "users": gameData.users, "questionID" : '', "answer_ok": '' , "userWon" : '', "bets":[]}
+        var round = {"category" : gameData.categoria, "users": gameData.users, "questionID" : '', "answer_ok": '' , "userWon" : '', "bets":[]}
         gameData.rounds = [];
         gameData.rounds.push(round);
         var users = gameData.users;
