@@ -1,10 +1,30 @@
 const uniqid = require('uniqid');
-const Question = require('../models/question')
+const Question = require('../models/question');
+const Category = require('../models/category');
+const Question_arte = require('../models/question_arte');
+const Question_ciencia = require('../models/question_ciencia');
+const Question_deportes = require('../models/question_deportes');
+const Question_entretenimiento = require('../models/question_entretenimiento');
+const Question_geografia = require('../models/question_geografia');
+const Question_historia = require('../models/question_historia');
+const logger = require('../configuration/logger')(__filename);
+
+
 var gameRooms = [];
 var gamesPlaying = {};
 const userList = [];
 const usersCount = 0;
 var io;
+
+//Traigo las categorias disponibles
+var categories = [];
+Category.find({}, {
+    "_id": 0,
+    "categoryName": 1
+  }, function(error, res){
+    categories = res.map(a => a.categoryName);
+})
+
 //Se crean las primeras rooms
 gameRooms.push({'id': uniqid(), 'books':100, 'level': 'Neofito', 'max': 4, 'inside': 0, 'users':[]});
 gameRooms.push({'id': uniqid(), 'books':100, 'level': 'Virtuoso', 'max': 4, 'inside': 0, 'users':[]});
@@ -13,16 +33,14 @@ gameRooms.push({'id': uniqid(), 'books':100, 'level': 'Serafin', 'max': 4, 'insi
 exports = module.exports = function (ios) {
     io = ios;
     io.on('connection', function(socket){
-
+        logger.info("New connection from" + socket.handshake.address);
         socket.on('newUser', newUser);
         socket.on('join', join);
         socket.on('userBet', userBet);
-        socket.on('userPass', userPass)
-        socket.on('finishBet', finishBet);
-        socket.on('userAnswer', userAnswer)
-
+        socket.on('userAnswer', userAnswer);
         socket.on('disconnect',function(){
             userList.splice(userList.indexOf(socket.id), 1);
+            logger.info("New disconnection from" + socket.handshake.address);
             console.log("User disconnected. Total online: ", userList.length);
         });
     
@@ -36,12 +54,12 @@ exports = module.exports = function (ios) {
 newUser = function(data){
     var socket = this;
     console.log("Usuario conectado: " + JSON.stringify(data));
-            console.log(data);
-            //Busco la partida segun el level
-            var index = gameRooms.findIndex(x => x.level === data.level);
-            socket.emit("Welcome", JSON.stringify(gameRooms[index]));
-            userList.push({'name':data.user, 'socketID':socket.id, 'turn': 0, 'userID': data.userID});
-            console.log("User connected. Total online: " + userList.length);
+    console.log(data);
+    //Busco la partida segun el level
+    var index = gameRooms.findIndex(x => x.level === data.level);
+    socket.emit("Welcome", JSON.stringify(gameRooms[index]));
+    userList.push({'name':data.user, 'socketID':socket.id, 'turn': 0, 'userID': data.userID});
+    console.log("User connected. Total online: " + userList.length);
 }
 
 /**
@@ -62,8 +80,7 @@ join = function(data){
         x[0].books = gameRooms[index].books;
         x[0].turn = gameRooms[index].inside + 1;
         gameRooms[index].inside = gameRooms[index].inside + 1;
-        gameRooms[index].users.push(x[0]);
-        
+        gameRooms[index].users.push(x[0]);  
     }else{
         socket.join(data);
         var index = gameRooms.findIndex(x => x.id === data);
@@ -74,29 +91,32 @@ join = function(data){
         x[0].books = gameRooms[index].books;
         gameRooms[index].inside = 1;
         gameRooms[index].users.push(x[0]);
-
     }
         
     if(socket.adapter.rooms[data].length === 4){
-        console.log('Room with id: ' + data + ' is full. Starting game...')
+        
+        logger.info('Room with id: ' + data + ' is full. Starting game...');
+        console.log('Room with id: ' + data + ' is full. Starting game...');
         var index = gameRooms.findIndex(x => x.id === data);
         var gameData = gameRooms[index];
         //Se crea otra room
-        gameRooms.push({'id': uniqid(), 'level': gameData.level, 'max': 4, 'inside': 0, 'users':[]});
+        gameRooms.push({'id': uniqid(), 'books': 100, 'level': gameData.level, 'max': 4, 'inside': 0, 'users':[]});
         //Partida full, se quita de la lista. 
         var x = gameRooms.filter(function (element){ return element.id != data });
         gameRooms = x;
         //Comienza la partida. Enviar quien empieza.
-        gameData.categoria = "Ciencia";
+        gameData.category = categories[Math.floor(Math.random()*categories.length)];
         io.sockets.in(data).emit('beginNewGame', JSON.stringify(gameData));
-        var round = {"category" : gameData.categoria, "users": gameData.users, "questionID" : '', "answer_ok": '' , "userWon" : '', "bets":[]}
+        var round = {"category" : gameData.category, "users": gameData.users, "questionID" : '', "answer_ok": '' , "userWon" : '', "bets":[]}
         gameData.rounds = [];
         gameData.rounds.push(round);
+        gameData.rounds[0].answers = [];
         var users = gameData.users;
         users = Object.assign({}, ...users.map(user => ({[user.socketID]: user})));
+        gameData.users = [];
         gameData.users = users;
         gamesPlaying[gameData.id] = gameData;
-        
+
     }
 }
 
@@ -111,49 +131,63 @@ function userBet(data){
     let bet = {"socketID": socket.id, "bet": data.value, "userID": data.userID}
     gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].bets.push(bet);
     
-    //Enviar cuanto aposto el user y quien sigue
-    
-
     //Se envía la pregunta cuanto los users ya hayan apostado
-    if (gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].bets.length == 4) {
-        socket.to(data.roomID).emit('newBet', JSON.stringify({"apuesta" : data.value, "next": null}));
-        Question.aggregate().sample(1).exec( function (err, result){
-            let question = {"id": result[0]._id, "question": result[0].question, "option_1": result[0].option_1, "option_2": result[0].option_2, "option_3": result[0].option_3 };
+    if (gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].bets.length === Object.keys(gamesPlaying[data.roomID].users).length) {
+        io.sockets.in(data.roomID).emit('newBet', JSON.stringify({"apuesta" : data.value, "next": null}));
+       
+        getQuestion(gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].category, 1, function(result){
+            let quest = result;
+            let question = {"id": quest._id, "question": quest.question, "option_1": quest.option_1, "option_2": quest.option_2, "option_3": quest.option_3 };
             io.sockets.in(data.roomID).emit('question', JSON.stringify(question));
-            gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].questionID = result.id;
-            gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answer_ok = result.answer_ok;
+            gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].questionID = quest.id;
+            gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answer_ok = quest.answer_ok;
         })
+
     }else{
         //Busco quien es el siguiente en el turno.
-        let nextIndex = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users.findIndex(x => x.socketID === socket.id) + 1;
-        let nextId =  gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users[nextIndex].userID;
-        socket.to(data.roomID).emit('newBet', JSON.stringify({"apuesta" : data.value, "next": nextId}));
+        let nextTurn;
+        let nextId;
+
+        for (const key in  gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users) {
+            if (key === socket.id) {
+                nextTurn = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users[key].turn + 1
+                break;
+            }
+            //let value =  gameData.users[key];
+        }
+        for (const key in  gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users) {
+            let value =  gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users[key];
+            if (value.turn === nextTurn) {
+                nextId = value.userID;
+                break;
+            }
+        }
+        //let nextIndex = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users.findIndex(x => x.socketID === socket.id) + 1;
+        //let nextId =  gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users[nextIndex].userID;
+        io.sockets.in(data.roomID).emit('newBet', JSON.stringify({"apuesta" : data.value, "next": nextId}));
     }
-    
-
-
     
 };
 
 /**
  * @param {{answer: String , roomID: string, timeResponse: Number, userID: string}} data
  */
+
 function userAnswer(data){
     var socket = this;
-    gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answers = [];
     let result;
-    let answerSelected = {"socketID": socket.id, "answer": data.value, "timeResponse": data.timeResponse}
+    let answerSelected = {"socketID": socket.id, "answer": data.answer, "timeResponse": data.timeResponse}
     gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answers.push(answerSelected);
     
-    if (gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answers.length == 4) {
+    if (gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answers.length === Object.keys(gamesPlaying[data.roomID].users).length) {
         //Opcion correcta
         let res_ok = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answer_ok;
         let winner;
         //verificar quien ganó, emitir respuesta y recalcular libros para cada user.
         for (let index = 0; index < gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answers.length; index++) {
             const element = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answers[index];
-            if (element.answer == res_ok) {
-                if (winner == null) {
+            if (element.answer === res_ok) {
+                if (winner === undefined) {
                     winner = element;
                 }else{
                     if (element.timeResponse < winner.timeResponse) {
@@ -162,22 +196,37 @@ function userAnswer(data){
                 }
             }
         }
+        //Si no hay ganador, entra al IF
+        if (winner === undefined) {
+            //Reasignar turnos
+            //NewRound
+            let newRound = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1];
+            newRound.category = categories[Math.floor(Math.random()*categories.length)];
+            newRound.questionID = "";
+            newRound.res_ok = "";
+            newRound.userWon ="";
+            newRound.bets = [];
+            newRound.answers = [];
+            newRound.users = changeTurns(gamesPlaying[data.roomID].users);
+            //newRound.users = gamesPlaying[data.roomID].users;
+            //newRound.users =  Object.keys(gamesPlaying[data.roomID].users).map(key => gamesPlaying[data.roomID].users[key]);
+            gamesPlaying[data.roomID].rounds.push(newRound);
+            io.sockets.in(data.roomID).emit('newRound', newRound);
+            return;
+        }
 
         //Se calculan los libros
         let userWinner = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].bets.filter(function (element){ return element.socketID == winner.socketID });
-        let price = userWinner.bet;
-        let result = gamesPlaying[data.roomID].users[userWinner.socketID].userID;
+        let price = Number(userWinner[0].bet);
+        let result = gamesPlaying[data.roomID].users[userWinner[0].socketID].userID;
         let usersLost = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].bets.filter(function (element){ return element.socketID != winner.socketID });
-        
         //Se envia el resultado
-        io.socket.in(data.roomID).emit('roundResult', {'userID' : result});
-
+        io.sockets.in(data.roomID).emit('roundResult', {'userID' : result});
+        console.log("Gano el user: " + result);
         //Se le suman libros al user que gano
-        gamesPlaying[data.roomID].users[userWinner.socketID].books = (gamesPlaying[data.roomID].users[userWinner.socketID].books + price) + (price * (gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users.length - 1));
-        
+        gamesPlaying[data.roomID].users[userWinner[0].socketID].books = Number((gamesPlaying[data.roomID].users[userWinner[0].socketID].books)) + Number((price * (Object.keys(gamesPlaying[data.roomID].users).length -1)));
         //Se le restan los libros a los que perdieron
         usersLost.forEach(element => {
-            //Hacer esto siempre y cuando no se reste del lado server al momento que apostó un user
             gamesPlaying[data.roomID].users[element.socketID].books = gamesPlaying[data.roomID].users[element.socketID].books - price;
             if (gamesPlaying[data.roomID].users[element.socketID].books <= 0){
                 //Game over para el player
@@ -186,38 +235,127 @@ function userAnswer(data){
             }
         });
 
-        let newRound = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1];
-        newRound.category = "Deportes";
-        newRound.questionID = "";
-        newRound.res_ok = "";
-        newRound.userWon ="";
-        newRound.bets = [];
-        newRound.answers = []; 
-        newRound.users = gamesPlaying[data.roomID].users;
-        gamesPlaying[data.roomID].rounds.push(newRound);        
-    
+        //Quedan más de 1 player?
+        if (Object.keys(gamesPlaying[data.roomID].users).length > 1) {
+
+            let newRound = gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1];
+            newRound.category = categories[Math.floor(Math.random()*categories.length)];
+            newRound.questionID = "";
+            newRound.res_ok = "";
+            newRound.userWon ="";
+            newRound.bets = [];
+            newRound.answers = []; 
+            newRound.users = changeTurns(gamesPlaying[data.roomID].users);
+            //newRound.users =  Object.keys(gamesPlaying[data.roomID].users).map(key => gamesPlaying[data.roomID].users[key]);
+            gamesPlaying[data.roomID].rounds.push(newRound);
+            io.sockets.in(data.roomID).emit('newRound', newRound);
+
+        }else{
+            //No quedan players, se elimina el room
+            //Se debe guardar en la DB antes de eliminar la partida.
+            console.log("Se termino la partida");
+            delete  gamesPlaying[data.roomID];
+        }
     }
 }
 
-/** 
- * @param data Contiene el ID del room
- */
-function finishBet(data){
-    //Enviar la pregunta a los usuarios
-    Question.aggregate().sample(1).exec( function (err, result){
-        io.sockets.in(data).emit('question', JSON.stringify(result));
-        console.log(result)
-    })
 
-};
+/**
+ * Function to get random question
+ * @param category
+ * @param level
+ *  */
+function getQuestion(category, level, callback){
+    switch (category) {
+        case "Arte":
+            Question_arte.aggregate().sample(1).exec(function (err, result){
+                callback(result[0]);
+            })
+            break;
+        case "Ciencia":
+            Question_ciencia.aggregate().sample(1).exec( function (err, result){
+                callback(result[0]);
+            })
+            break;
+        case "Deportes":
+            Question_deportes.aggregate().sample(1).exec( function (err, result){
+                callback(result[0]);
+            })
+            break;
+        case "Entretenimiento":
+            Question_entretenimiento.aggregate().sample(1).exec( function (err, result){
+                callback(result[0]);
+            })
+            break;
+        case "Geografia":
+            Question_geografia.aggregate().sample(1).exec( function (err, result){
+                callback(result[0]);
+            })
+            break;
+        case "Historia":
+            Question_historia.aggregate().sample(1).exec( function (err, result){
+                callback(result[0]);
+            })
+            break;                
+        default:
+            break;
+    }
+}
 
-/** 
- * @param data Contiene el ID del room
- */
-function userPass(data){
-    var socket = this;
+/**
+ * Function to re-order the turns 
+ * @param obj objeto con los users de la room
+ *  */
+function changeTurns(obj){
+    //Reacomodamiento de turnos si quedan 4 players
+    if (Object.keys(obj).length === 4) {
 
-    gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users = gamesPlaying[data.roomID].round[gamesPlaying[data.roomID].round.length -1].usersfilter(function (element){ return element.socketID != socket.id });
-    //remover el usuario que no juega la ronda
-    console.log(gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].users)
-};
+        Object.keys(obj).forEach(key => {
+            let value = obj[key];
+            if (value.turn === 1) {
+                value.turn = 4;
+            }else{
+                value.turn = value.turn - 1;
+            }
+        });
+        
+    }else{
+        //reordenamiento de los users segun turno
+        Object.keys(obj).sort(function (a, b) {
+            if (obj[a].turn > obj[b].turn) {
+              return 1;
+            }
+            if (obj[a].turn < obj[b].turn) {
+              return -1;
+            }
+            // a must be equal to b
+            return 0;
+        });
+
+        //Quito el/los turnos que falten
+        let index = 1;
+        let isOne = false;
+        for (const key in  obj) {
+            if (obj[key].turn === 1 ) {
+                isOne = true;
+            }
+            obj[key].turn = index;
+            index++;
+        }
+        index = 1;
+        //Reasigno turnos
+        if (!isOne) {
+            for (const key in  obj) {
+                if (index === 1) {
+                    obj[key].turn = Object.keys(obj).length;
+                }else{
+                    obj[key].turn =obj[key].turn - 1;
+                }
+                index++;
+            }
+        }
+        
+    }
+    return obj;
+}
+

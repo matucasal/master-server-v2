@@ -15,7 +15,7 @@
     "express": "^4.16.4",
     "express-promise-router": "^3.0.3",
     "joi": "^13.7.0",
-    "mongoose": "^5.4.14",
+    "mongoose": "^5.4.17",
     "morgan": "^1.9.1",
     "passport": "^0.4.0",
     "passport-facebook-token": "^3.3.0",
@@ -25,6 +25,6 @@
     "path": "^0.12.7",
     "socket.io": "^2.2.0",
     "uniqid": "^5.0.3",
-    "util": "^0.11.1"
+    "winston": "^3.2.1"
   }
 }

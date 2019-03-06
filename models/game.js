@@ -10,8 +10,7 @@ const gameSchema = new Schema({
     won: { user : String }
     
   });
-  
-  
+    
   // Create a model
   const Game = mongoose.model('games', gameSchema);
   

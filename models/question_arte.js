@@ -2,21 +2,20 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 // Create a schema
-const questionSchema = new Schema({
+const question_arteSchema = new Schema({
 
     level: { type: String },
     sublevel: { type: String },
-    category: { type: String },
     question: { type: String },
     option_1: { type: String },
     option_2: { type: String },
-    option_2: { type: String },
+    option_3: { type: String },
     answer_ok: { type: String }
     
   });
   
   // Create a model
-  const Question = mongoose.model('question', questionSchema);
+  const Question_arte = mongoose.model('question_arte', question_arteSchema);
   
   // Export the model
-  module.exports = Question;
+  module.exports = Question_arte;

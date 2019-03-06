@@ -8,9 +8,9 @@ const userSchema = new Schema({
   level: { type: String },
   avatar: { type: String, default: 'avatarDefault.png' },
   accesories: [String],
-  gamePlayed: { type: Number, default: 0},
-  gameWon: { type: Number, default: 0 },
-  gameLost: { type: Number, default: 0 },
+  gamesPlayed: { type: Number, default: 0},
+  gamesWon: { type: Number, default: 0 },
+  gamesLost: { type: Number, default: 0 },
   favoriteCategory: { type: String },
   method: {
     type: String,
