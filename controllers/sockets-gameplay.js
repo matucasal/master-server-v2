@@ -8,6 +8,7 @@ const Question_entretenimiento = require('../models/question_entretenimiento');
 const Question_geografia = require('../models/question_geografia');
 const Question_historia = require('../models/question_historia');
 const logger = require('../configuration/logger')(__filename);
+const Game = require('../models/game');
 
 
 var gameRooms = [];
@@ -15,6 +16,15 @@ var gamesPlaying = {};
 const userList = [];
 const usersCount = 0;
 var io;
+
+//logger.emerg("Emergency");
+//logger.alert("Alert");
+//logger.crit("Critial");
+//logger.error("Error");
+//logger.warning("Warning");
+//logger.notice("Notice");
+//logger.info("Info"); 
+//logger.debug("debug");
 
 //Traigo las categorias disponibles
 var categories = [];
@@ -41,7 +51,6 @@ exports = module.exports = function (ios) {
         socket.on('disconnect',function(){
             userList.splice(userList.indexOf(socket.id), 1);
             logger.info("New disconnection from" + socket.handshake.address);
-            console.log("User disconnected. Total online: ", userList.length);
         });
     
     })
@@ -53,8 +62,6 @@ exports = module.exports = function (ios) {
  */
 newUser = function(data){
     var socket = this;
-    console.log("Usuario conectado: " + JSON.stringify(data));
-    console.log(data);
     //Busco la partida segun el level
     var index = gameRooms.findIndex(x => x.level === data.level);
     socket.emit("Welcome", JSON.stringify(gameRooms[index]));
@@ -96,27 +103,28 @@ join = function(data){
     if(socket.adapter.rooms[data].length === 4){
         
         logger.info('Room with id: ' + data + ' is full. Starting game...');
-        console.log('Room with id: ' + data + ' is full. Starting game...');
         var index = gameRooms.findIndex(x => x.id === data);
         var gameData = gameRooms[index];
         //Se crea otra room
-        gameRooms.push({'id': uniqid(), 'books': 100, 'level': gameData.level, 'max': 4, 'inside': 0, 'users':[]});
+        let id = uniqid();
+        gameRooms.push({'id': id, 'books': 100, 'level': gameData.level, 'max': 4, 'inside': 0, 'users':[]});
+        logger.info("New room was created. ID: " + id);
         //Partida full, se quita de la lista. 
         var x = gameRooms.filter(function (element){ return element.id != data });
         gameRooms = x;
         //Comienza la partida. Enviar quien empieza.
         gameData.category = categories[Math.floor(Math.random()*categories.length)];
         io.sockets.in(data).emit('beginNewGame', JSON.stringify(gameData));
-        var round = {"category" : gameData.category, "users": gameData.users, "questionID" : '', "answer_ok": '' , "userWon" : '', "bets":[]}
-        gameData.rounds = [];
-        gameData.rounds.push(round);
-        gameData.rounds[0].answers = [];
+        saveGame(gameData.id, gameData.users);
         var users = gameData.users;
         users = Object.assign({}, ...users.map(user => ({[user.socketID]: user})));
         gameData.users = [];
         gameData.users = users;
-        gamesPlaying[gameData.id] = gameData;
-
+        var round = {"category" : gameData.category, "users": gameData.users, "questionID" : '', "answer_ok": '' , "userWon" : '', "bets":[]}
+        gameData.rounds = [];
+        gameData.rounds.push(round);
+        gameData.rounds[0].answers = [];
+        gamesPlaying[gameData.id] = gameData;   
     }
 }
 
@@ -136,11 +144,16 @@ function userBet(data){
         io.sockets.in(data.roomID).emit('newBet', JSON.stringify({"apuesta" : data.value, "next": null}));
        
         getQuestion(gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].category, 1, function(result){
-            let quest = result;
+            if(result){
+                let quest = result;
             let question = {"id": quest._id, "question": quest.question, "option_1": quest.option_1, "option_2": quest.option_2, "option_3": quest.option_3 };
             io.sockets.in(data.roomID).emit('question', JSON.stringify(question));
             gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].questionID = quest.id;
             gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answer_ok = quest.answer_ok;
+            }else{
+                console.log("error question");
+            }
+            
         })
 
     }else{
@@ -253,7 +266,9 @@ function userAnswer(data){
         }else{
             //No quedan players, se elimina el room
             //Se debe guardar en la DB antes de eliminar la partida.
-            console.log("Se termino la partida");
+            logger.info("Game terminated. ID: " + data.roomID);
+            console.log(gamesPlaying[data.roomID].users);
+            gameUpdate(data.roomID, gamesPlaying[data.roomID].users[Object.keys(gamesPlaying[data.roomID].users)[0]],  gamesPlaying[data.roomID].rounds.length, gamesPlaying[data.roomID].books);
             delete  gamesPlaying[data.roomID];
         }
     }
@@ -289,6 +304,7 @@ function getQuestion(category, level, callback){
             break;
         case "Geografia":
             Question_geografia.aggregate().sample(1).exec( function (err, result){
+                console.log("Geografia")
                 callback(result[0]);
             })
             break;
@@ -344,7 +360,7 @@ function changeTurns(obj){
         }
         index = 1;
         //Reasigno turnos
-        if (!isOne) {
+        if (isOne) {
             for (const key in  obj) {
                 if (index === 1) {
                     obj[key].turn = Object.keys(obj).length;
@@ -357,5 +373,35 @@ function changeTurns(obj){
         
     }
     return obj;
+}
+
+saveGame = function(id, users){
+    game = new Game({
+        'gameID': id,
+        'participants': users
+    })
+    game.save((err, appt) => {
+        if (err){logger.error(err); }
+        console.log("Mongo save");
+        logger.info("Mongodb inserted action was ok");
+      });
+
+}
+
+gameUpdate = function(id, won, rounds, initialBooks){
+
+    let winner = {
+        "userID": won.userID,
+        "username": won.user,
+        "price": won.books - initialBooks
+    }
+    game = {
+        'rounds': rounds,
+        'won': winner
+    }
+    Game.findOneAndUpdate({'gameID': id},game,function(error){
+        if (error){ logger.error(error)}
+        logger.debug("Mongodb object updated succesfully")
+    })
 }
 

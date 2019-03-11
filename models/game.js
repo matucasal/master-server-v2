@@ -5,9 +5,10 @@ const Schema = mongoose.Schema;
 const gameSchema = new Schema({
 
     date: { type: Date, default: Date.now },
-    participants: [{ userID: String }, { price: Number }, { username: string }],
+    gameID: { type: String, required: true },
+    participants: [{}],
     rounds : { type: Number },
-    won: { user : String }
+    won: [{}]
     
   });
     

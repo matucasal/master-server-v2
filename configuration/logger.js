@@ -1,9 +1,9 @@
-const { createLogger, format, transports } = require('winston');
+const { createLogger, format, transports, config } = require('winston');
 const path = require('path');
 
 var options = {
   file: {
-    filename: 'logs/app.log',
+    filename: 'logs/master-server.log',
     //handleExceptions: true,
     json: true,
     maxsize: 50*1024, //50MB
@@ -26,7 +26,6 @@ var optionsError = {
 
 const logger = caller => {
   return createLogger({
-    level: 'debug',
     format: format.combine(
       format.label({ label: path.basename(caller) }),
       format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -35,12 +34,26 @@ const logger = caller => {
           `${info.timestamp} ${info.level} [${info.label}]: ${info.message}`
       )
     ),
+    levels: config.syslog.levels,
     transports: [    
       new transports.File(optionsError.file),
-      new transports.File(options.file)
+      new transports.File(options.file),
+      new transports.Console(options.file)
     ]
   });
 };
+
+var optionsDB = {
+  file: {
+    level: 'error',
+    filename: 'logs/master-DB.log',
+    //handleExceptions: true,
+    json: false,
+    maxsize: 50*1024, //50MB
+    maxFiles: 10,
+    colorize: true,
+  }
+}
 
 
 

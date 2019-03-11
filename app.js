@@ -4,12 +4,15 @@ const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const config = require('./configuration/database'); // Mongoose Config 
 const path = require('path');
+const logger = require('./configuration/logger')(__filename);
 
 mongoose.Promise = global.Promise;
 if (process.env.NODE_ENV === 'test') {
   mongoose.connect(config.uri, { useNewUrlParser: true });
+  logger.info("Mongodb connection succesfully");
 } else {
   mongoose.connect(config.uri, { useNewUrlParser: true });
+  logger.info("Mongodb connection succesfully");
 }
 
 const app = express();

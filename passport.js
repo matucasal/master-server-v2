@@ -6,6 +6,7 @@ const GooglePlusTokenStrategy = require('passport-google-plus-token');
 const FacebookTokenStrategy = require('passport-facebook-token');
 const config = require('./configuration');
 const User = require('./models/user');
+const logger = require('./configuration/logger')(__filename);
 
 // JSON WEB TOKENS STRATEGY
 passport.use(new JwtStrategy({
@@ -79,7 +80,7 @@ passport.use('facebookToken', new FacebookTokenStrategy({
         email: profile.emails[0].value,
       },
       books: 1000,
-      level: "Newbie",
+      level: "Neofito",
 
     });
 
@@ -96,6 +97,7 @@ passport.use(new LocalStrategy({
 }, async (email, password, done) => {
   try {
     // Find the user given the email
+    logger.notice("New user login requested from: " + email);
     const user = await User.findOne({ "local.email": email });
     
     // If not, handle it
