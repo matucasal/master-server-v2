@@ -99,7 +99,7 @@ passport.use(new LocalStrategy({
     // Find the user given the email
     logger.notice("New user login requested from: " + email);
     const user = await User.findOne({ "local.email": email });
-    
+    logger.notice("User: " + user);
     // If not, handle it
     if (!user) {
       return done(null, false);
