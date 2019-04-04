@@ -9,7 +9,7 @@ const Question_geografia = require('../models/question_geografia');
 const Question_historia = require('../models/question_historia');
 const logger = require('../configuration/logger')(__filename);
 const Game = require('../models/game');
-
+const User = require('../controllers/users');
 
 var gameRooms = [];
 var gamesPlaying = {};
@@ -48,11 +48,20 @@ exports = module.exports = function (ios) {
         socket.on('join', join);
         socket.on('userBet', userBet);
         socket.on('userAnswer', userAnswer);
+        socket.on('disconnecting',function(){
+            //Si el user esta en una room, avisar de su desconexión
+            if(Object.getOwnPropertyNames(socket.rooms)[1] != undefined){
+                io.sockets.to(Object.getOwnPropertyNames(socket.rooms)[1]).emit('userLeft', {"socketID": socket.id})
+                if (gamesPlaying.indexOf(Object.getOwnPropertyNames(socket.rooms)[1]) != -1) {
+                    delete gamesPlaying[Object.getOwnPropertyNames(socket.rooms)[1]].users[socket.id];
+                    delete gamesPlaying[Object.getOwnPropertyNames(socket.rooms)[1]].rounds[gamesPlaying[Object.getOwnPropertyNames(socket.rooms)[1]].rounds.length -1].users[socket.id]
+                }
+            }
+        });
         socket.on('disconnect',function(){
             userList.splice(userList.indexOf(socket.id), 1);
             logger.info("New disconnection from" + socket.handshake.address);
         });
-    
     })
 
 };
@@ -189,7 +198,8 @@ function userBet(data){
 function userAnswer(data){
     var socket = this;
     let result;
-    let answerSelected = {"socketID": socket.id, "answer": data.answer, "timeResponse": data.timeResponse}
+    let answerSelected = {"socketID": socket.id, "answer": data.answer, "timeResponse": data.timeResponse};
+    console.log(answerSelected);
     gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answers.push(answerSelected);
     
     if (gamesPlaying[data.roomID].rounds[gamesPlaying[data.roomID].rounds.length -1].answers.length === Object.keys(gamesPlaying[data.roomID].users).length) {
@@ -243,6 +253,9 @@ function userAnswer(data){
             gamesPlaying[data.roomID].users[element.socketID].books = gamesPlaying[data.roomID].users[element.socketID].books - price;
             if (gamesPlaying[data.roomID].users[element.socketID].books <= 0){
                 //Game over para el player
+                io.to(element.socketID).emit('gameOver', {'userID' : element.userID});
+                //Cerrar conexion socket
+                
                 //Hay que quitarlo de la room
                 delete gamesPlaying[data.roomID].users[element.socketID];
             }
@@ -266,9 +279,12 @@ function userAnswer(data){
         }else{
             //No quedan players, se elimina el room
             //Se debe guardar en la DB antes de eliminar la partida.
+            //Se envia aviso a los players que quedan
+            io.sockets.in(data.roomID).emit('roomClosed', {'userID' : result});
             logger.info("Game terminated. ID: " + data.roomID);
-            console.log(gamesPlaying[data.roomID].users);
-            gameUpdate(data.roomID, gamesPlaying[data.roomID].users[Object.keys(gamesPlaying[data.roomID].users)[0]],  gamesPlaying[data.roomID].rounds.length, gamesPlaying[data.roomID].books);
+            gamesPlaying[data.roomID].users[Object.keys(gamesPlaying[data.roomID].users)[0]].books = gamesPlaying[data.roomID].users[Object.keys(gamesPlaying[data.roomID].users)[0]].books - gamesPlaying[data.roomID].books;
+            User.updateBooks(gamesPlaying[data.roomID].users[Object.keys(gamesPlaying[data.roomID].users)[0]]);
+            gameUpdate(data.roomID, gamesPlaying[data.roomID].users[Object.keys(gamesPlaying[data.roomID].users)[0]],  gamesPlaying[data.roomID].rounds.length);
             delete  gamesPlaying[data.roomID];
         }
     }
@@ -336,41 +352,40 @@ function changeTurns(obj){
         });
         
     }else{
-        //reordenamiento de los users segun turno
-        Object.keys(obj).sort(function (a, b) {
-            if (obj[a].turn > obj[b].turn) {
-              return 1;
-            }
-            if (obj[a].turn < obj[b].turn) {
-              return -1;
-            }
-            // a must be equal to b
-            return 0;
+        //reordenamiento de los users cuando quedan menos de 4
+        //Paso el object a array y los ordeno
+        var newArrayUsers = Object.entries(obj);
+        newArrayUsers.sort(function (a, b) {
+        if (a[1].turn > b[1].turn) {
+            return 1;
+        }
+        if (a[1].turn < b[1].turn) {
+            return -1;
+        }
+        // a must be equal to b
+        return 0;
         });
 
-        //Quito el/los turnos que falten
-        let index = 1;
-        let isOne = false;
-        for (const key in  obj) {
-            if (obj[key].turn === 1 ) {
-                isOne = true;
-            }
-            obj[key].turn = index;
-            index++;
+        //Corrigo los Turnos
+        for (let index = 0; index < newArrayUsers.length; index++) {
+            newArrayUsers[index][1].turn = index+1; 
         }
-        index = 1;
-        //Reasigno turnos
-        if (isOne) {
-            for (const key in  obj) {
-                if (index === 1) {
-                    obj[key].turn = Object.keys(obj).length;
-                }else{
-                    obj[key].turn =obj[key].turn - 1;
-                }
-                index++;
+        //Se cambia el orden
+        for (let index = 0; index < newArrayUsers.length; index++) {
+   
+            if (newArrayUsers[index][1].turn === 1) {
+                newArrayUsers[index][1].turn = newArrayUsers.length;
+            }else{
+                newArrayUsers[index][1].turn =newArrayUsers[index][1].turn - 1;
             }
+             
         }
-        
+        //Retorno como object
+        obj = newArrayUsers.reduce((acc, record) => ({
+            ...acc,
+            [record[0]]: record[1],
+        }), {});
+            
     }
     return obj;
 }
@@ -388,12 +403,12 @@ saveGame = function(id, users){
 
 }
 
-gameUpdate = function(id, won, rounds, initialBooks){
+gameUpdate = function(id, won, rounds){
 
     let winner = {
         "userID": won.userID,
-        "username": won.user,
-        "price": won.books - initialBooks
+        "username": won.name,
+        "price": won.books
     }
     game = {
         'rounds': rounds,

@@ -66,7 +66,17 @@ module.exports = {
   secret: async (req, res, next) => {
     console.log('I managed to get here!');
     res.json({ secret: "resource" });
-  }
+  },
+
+  updateBooks: async (user) => {
+    User.findOneAndUpdate({ _id: user.userID }, { $inc: { books: user.books }}, {new: true},function(err, response) {
+      if (err) {
+        console.log(err);
+      }else{
+        console.log(response);
+      }
+    }
+  )}
 
 
 }
