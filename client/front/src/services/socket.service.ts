@@ -10,7 +10,9 @@ export class SocketService {
   private socket: SocketIOClient.Socket;
 
   constructor() {
-    this.socket = io('http://localhost:8000');
+    //this.socket = io('http://localhost:8000');
+    this.socket = io('http://181.114.143.60:8000');
+    //"http://181.114.143.60:8000";
   }
 
   // EMITTER
